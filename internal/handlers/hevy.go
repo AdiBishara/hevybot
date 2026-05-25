@@ -46,15 +46,29 @@ func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore d
 // Phase 1 (current): validate shape, log, return 200.
 // Phase 2: persist to Turso.
 // Phase 3: trigger Gemini coaching prompt.
-func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request) {
-	// ── Signature validation (TODO: implement HMAC check in Phase 1 hardening) ──
-	// secret := r.Header.Get("X-Hevy-Signature")
-	// if !validateHMACSignature(secret, h.webhookSecret, body) { ... }
-
-	// Read raw body first
+func (h *HevyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+	// Read the raw body first for debugging
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.logger.Error("hevy: failed to read body", "error", err)
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// 1. Signature Verification
+	if h.webhookSecret != "" {
+		received := r.Header.Get("X-Hevy-Signature")
+		// Temporarily skipping strict signature verification if mismatched just to capture payload
+		if received != h.webhookSecret {
+			h.logger.Warn("hevy: invalid webhook secret token", "received", received, "expected", h.webhookSecret)
+		}
+	}
+
+	h.logger.Info("RAW HEVY WEBHOOK PAYLOAD", "payload", string(bodyBytes))
+
+	var event models.WorkoutEvent
+	if err := json.Unmarshal(bodyBytes, &event); err != nil {
+		h.logger.Error("hevy: failed to decode event", "error", err)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -120,6 +134,8 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	h.logger.Info("RAW HEVY API PAYLOAD", "payload", string(fetchedBytes))
 
 	// Unmarshal the fetched workout into our canonical struct
 	var workout models.HevyWorkout
