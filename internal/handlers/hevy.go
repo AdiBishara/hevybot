@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/models"
@@ -120,6 +121,14 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.logger.Info("hevy: FETCHED workout successfully", "title", workout.Title, "exercises", len(workout.Exercises))
+
+	// Filter out test workouts so they don't pollute the database
+	lowerTitle := strings.ToLower(workout.Title)
+	if strings.Contains(lowerTitle, "testworkout") || strings.Contains(lowerTitle, "test workout") {
+		h.logger.Info("hevy: skipping database insertion for test workout", "title", workout.Title)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	// ── Phase 2: Persist to Turso ──
 	if err := h.dbStore.SaveWorkout(r.Context(), &workout); err != nil {
