@@ -3,9 +3,12 @@ FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-# Cache dependency downloads separately from source changes
-COPY go.mod go.sum* ./
-RUN go mod download
+# Install git (needed by go mod to fetch from GitHub)
+RUN apk add --no-cache git ca-certificates
+
+# Copy module definition — run tidy to fetch deps and generate go.sum on the fly
+COPY go.mod ./
+RUN go mod tidy
 
 # Copy source and build a statically-linked binary
 COPY . .
