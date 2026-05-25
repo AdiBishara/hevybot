@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config holds all runtime secrets and settings loaded from environment variables.
@@ -43,7 +44,7 @@ func Load() (*Config, error) {
 // requireEnv fetches an env var and panics with a clear message if it is not set.
 // Fail-fast is intentional: a misconfigured pod should never silently handle requests.
 func requireEnv(key string) string {
-	v := os.Getenv(key)
+	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
 		panic(fmt.Sprintf("config: required environment variable %q is not set", key))
 	}
@@ -52,7 +53,7 @@ func requireEnv(key string) string {
 
 // getEnv fetches an env var with a fallback default value.
 func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return fallback
