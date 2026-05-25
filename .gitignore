@@ -1,0 +1,15 @@
+.env
+*.env
+
+# Compiled binaries
+bot
+bot.exe
+/bin/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Legacy scratch files
+GO_files/
+*.docx
