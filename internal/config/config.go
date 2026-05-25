@@ -32,7 +32,7 @@ func Load() (*Config, error) {
 		TursoDBURL:           requireEnv("TURSO_DB_URL"),
 		TursoAuthToken:       requireEnv("TURSO_AUTH_TOKEN"),
 		GeminiAPIKey:         requireEnv("GEMINI_API_KEY"),
-		GeminiModel:          getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GeminiModel:          getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
 	}
 
 	// Validate PORT is a non-empty string (Koyeb injects this automatically)
