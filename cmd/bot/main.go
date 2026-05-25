@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/yourusername/hevybot/internal/config"
+	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/handlers"
 )
 
@@ -28,8 +29,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Database Init & Migrations ──
+	if err := db.RunMigrations(context.Background(), cfg.TursoDBURL, cfg.TursoAuthToken); err != nil {
+		logger.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
+	store, err := db.NewTursoStore(cfg.TursoDBURL, cfg.TursoAuthToken)
+	if err != nil {
+		logger.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("connected to turso database successfully")
+
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
-	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey)
+	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store)
 	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramBotToken, cfg.TelegramWebhookSecret)
 
 	// ── Router ──

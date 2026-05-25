@@ -5,6 +5,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/yourusername/hevybot/internal/db"
+	"github.com/yourusername/hevybot/internal/models"
 )
 
 // HevyHandler groups all dependencies needed by Hevy webhook handlers.
@@ -13,16 +16,17 @@ type HevyHandler struct {
 	logger        *slog.Logger
 	webhookSecret string
 	apiKey        string
-	// db    db.Store      ← injected in Phase 2
+	dbStore       db.Store
 	// ai    ai.Client     ← injected in Phase 3
 }
 
 // NewHevyHandler constructs a HevyHandler with its dependencies.
-func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string) *HevyHandler {
+func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore db.Store) *HevyHandler {
 	return &HevyHandler{
 		logger:        logger,
 		webhookSecret: webhookSecret,
 		apiKey:        apiKey,
+		dbStore:       dbStore,
 	}
 }
 
@@ -88,12 +92,31 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// For now, log the raw workout response so we know EXACTLY what the API returns
-	// before we finalize saving it to Turso.
-	fetchedBytes, _ := io.ReadAll(resp.Body)
-	h.logger.Info("hevy: FETCHED workout details", "body", string(fetchedBytes))
+	fetchedBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.logger.Error("hevy: failed to read api response body", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 
-	// ── Phase 2: db.SaveWorkout(r.Context(), workout) ──
+	// Unmarshal the fetched workout into our canonical struct
+	var workout models.HevyWorkout
+	if err := json.Unmarshal(fetchedBytes, &workout); err != nil {
+		h.logger.Error("hevy: failed to decode fetched workout", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("hevy: FETCHED workout successfully", "title", workout.Title, "exercises", len(workout.Exercises))
+
+	// ── Phase 2: Persist to Turso ──
+	if err := h.dbStore.SaveWorkout(r.Context(), &workout); err != nil {
+		h.logger.Error("hevy: failed to save workout to db", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	h.logger.Info("hevy: workout saved to Turso", "workout_id", workout.ID)
+
 	// ── Phase 3: ai.GenerateCoachingFeedback(r.Context(), workout) ──
 
 	w.WriteHeader(http.StatusOK)
