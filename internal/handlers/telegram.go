@@ -61,9 +61,16 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle Callback Queries (Button clicks)
+	if update.CallbackQuery != nil {
+		ctx := context.Background()
+		go h.handleCallbackQuery(ctx, update.CallbackQuery)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if update.Message == nil {
-		// Telegram sends non-message updates (e.g., edited_message, callback_query).
-		// Acknowledge silently — routing for these types added in Phase 4.
+		// Telegram sends non-message updates (e.g., edited_message).
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -76,18 +83,6 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// ── Phase 2/3/4/5: Route commands & callbacks ──
 	ctx := context.Background() // Use background context for async processing if needed, or request context
-
-	// Handle Callback Queries (Button clicks)
-	if update.CallbackQuery != nil {
-		go h.handleCallbackQuery(ctx, update.CallbackQuery)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if update.Message == nil {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 
 	text := strings.TrimSpace(update.Message.Text)
 	chatID := update.Message.Chat.ID
@@ -210,6 +205,13 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.TelegramCallbackQuery) {
+	h.logger.Info("processing callback query", "callback_id", cb.ID, "data", cb.Data)
+
+	if cb.From == nil {
+		h.logger.Error("callback query missing From field")
+		return
+	}
+
 	// Stop the loading spinner on the user's phone
 	if err := h.tgClient.AnswerCallbackQuery(ctx, cb.ID); err != nil {
 		h.logger.Error("failed to answer callback query", "error", err)
