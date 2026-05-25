@@ -102,13 +102,25 @@ func (c *geminiClient) GenerateCoachingFeedback(ctx context.Context, w *models.H
 func buildPrompt(w *models.HevyWorkout) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Workout Title: %s\n", w.Title))
-	sb.WriteString(fmt.Sprintf("Duration: %s to %s\n", w.StartTime.Format(time.RFC822), w.EndTime.Format(time.RFC822)))
+	sb.WriteString(fmt.Sprintf("Duration: %s to %s\n", w.StartTime, w.EndTime))
 	sb.WriteString("Exercises:\n")
 
 	for _, ex := range w.Exercises {
 		sb.WriteString(fmt.Sprintf("- %s\n", ex.Title))
 		for _, set := range ex.Sets {
-			sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps (RPE: %.1f)\n", set.Index+1, set.WeightKG, set.Reps, set.RPE))
+			weight := 0.0
+			if set.WeightKG != nil {
+				weight = *set.WeightKG
+			}
+			reps := 0
+			if set.Reps != nil {
+				reps = *set.Reps
+			}
+			rpe := 0.0
+			if set.RPE != nil {
+				rpe = *set.RPE
+			}
+			sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps (RPE: %.1f)\n", set.Index+1, weight, reps, rpe))
 		}
 	}
 	return sb.String()
