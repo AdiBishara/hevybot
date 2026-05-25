@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Port              string // HTTP port the server listens on (default: 8080)
 	HevyWebhookSecret string // Shared secret used to validate inbound Hevy webhook signatures
+	HevyAPIKey        string // Used to fetch the full workout after receiving a ping
 	TelegramBotToken  string // Token issued by @BotFather
 	TelegramWebhookSecret string // Optional secret header Telegram sends with each update
 	TursoDBURL        string // wss://your-db.turso.io
@@ -23,6 +24,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:              getEnv("PORT", "8080"),
 		HevyWebhookSecret:    requireEnv("HEVY_WEBHOOK_SECRET"),
+		HevyAPIKey:           requireEnv("HEVY_API_KEY"),
 		TelegramBotToken:     requireEnv("TELEGRAM_BOT_TOKEN"),
 		TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 		TursoDBURL:           requireEnv("TURSO_DB_URL"),
