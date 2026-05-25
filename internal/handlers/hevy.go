@@ -5,8 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-
-	"github.com/yourusername/hevybot/internal/models"
 )
 
 // HevyHandler groups all dependencies needed by Hevy webhook handlers.
