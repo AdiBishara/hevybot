@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -73,7 +74,8 @@ func (c *geminiClient) GenerateCoachingFeedback(ctx context.Context, w *models.H
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("gemini API returned status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("gemini API returned status %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	// Parse the response
