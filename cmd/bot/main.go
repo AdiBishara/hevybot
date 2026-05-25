@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/yourusername/hevybot/internal/ai"
 	"github.com/yourusername/hevybot/internal/config"
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/handlers"
@@ -41,8 +42,11 @@ func main() {
 	}
 	logger.Info("connected to turso database successfully")
 
+	// ── AI Client ──
+	aiClient := ai.NewGeminiClient(cfg.GeminiAPIKey)
+
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
-	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store)
+	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient)
 	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramBotToken, cfg.TelegramWebhookSecret)
 
 	// ── Router ──

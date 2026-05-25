@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/yourusername/hevybot/internal/ai"
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/models"
 )
@@ -18,16 +19,17 @@ type HevyHandler struct {
 	webhookSecret string
 	apiKey        string
 	dbStore       db.Store
-	// ai    ai.Client     ← injected in Phase 3
+	aiClient      ai.Client
 }
 
 // NewHevyHandler constructs a HevyHandler with its dependencies.
-func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore db.Store) *HevyHandler {
+func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore db.Store, aiClient ai.Client) *HevyHandler {
 	return &HevyHandler{
 		logger:        logger,
 		webhookSecret: webhookSecret,
 		apiKey:        apiKey,
 		dbStore:       dbStore,
+		aiClient:      aiClient,
 	}
 }
 
@@ -138,7 +140,22 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 	}
 	h.logger.Info("hevy: workout saved to Turso", "workout_id", workout.ID)
 
-	// ── Phase 3: ai.GenerateCoachingFeedback(r.Context(), workout) ──
+	// ── Phase 3: Gemini Coaching Feedback ──
+	// We run this in a goroutine so the webhook responds to Hevy instantly
+	go func(w *models.HevyWorkout) {
+		// Create a background context since the request context is cancelled when we return 200 OK
+		ctx := context.Background()
+		h.logger.Info("hevy: analyzing workout with Gemini", "workout_id", w.ID)
+		
+		feedback, err := h.aiClient.GenerateCoachingFeedback(ctx, w)
+		if err != nil {
+			h.logger.Error("hevy: failed to generate AI feedback", "error", err)
+			return
+		}
+		
+		h.logger.Info("hevy: generated coaching feedback", "feedback", feedback)
+		// Phase 4: Route this feedback to Telegram!
+	}(&workout)
 
 	w.WriteHeader(http.StatusOK)
 }
