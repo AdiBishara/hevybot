@@ -20,13 +20,15 @@ type Client interface {
 
 type geminiClient struct {
 	apiKey string
+	model  string
 	client *http.Client
 }
 
-// NewGeminiClient returns a new AI client using the provided Google AI Studio key.
-func NewGeminiClient(apiKey string) Client {
+// NewGeminiClient returns a new AI client using the provided Google AI Studio key and model name.
+func NewGeminiClient(apiKey, model string) Client {
 	return &geminiClient{
 		apiKey: apiKey,
+		model:  model,
 		client: &http.Client{Timeout: 30 * time.Second}, // LLMs can be slow
 	}
 }
@@ -35,8 +37,8 @@ func NewGeminiClient(apiKey string) Client {
 func (c *geminiClient) GenerateCoachingFeedback(ctx context.Context, w *models.HevyWorkout) (string, error) {
 	prompt := buildPrompt(w)
 
-	// Google AI Studio REST API format for Gemini 2.0 Flash
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", c.apiKey)
+	// Google AI Studio REST API format
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", c.model, c.apiKey)
 
 	reqBody := map[string]interface{}{
 		"contents": []map[string]interface{}{

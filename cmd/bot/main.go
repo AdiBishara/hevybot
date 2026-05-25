@@ -43,7 +43,7 @@ func main() {
 	logger.Info("connected to turso database successfully")
 
 	// ── AI Client ──
-	aiClient := ai.NewGeminiClient(cfg.GeminiAPIKey)
+	aiClient := ai.NewGeminiClient(cfg.GeminiAPIKey, cfg.GeminiModel)
 
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
 	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient)

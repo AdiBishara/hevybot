@@ -17,6 +17,7 @@ type Config struct {
 	TursoDBURL        string // wss://your-db.turso.io
 	TursoAuthToken    string // JWT issued by Turso
 	GeminiAPIKey      string // Key from Google AI Studio
+	GeminiModel       string // e.g., gemini-1.5-pro
 }
 
 // Load reads required environment variables and returns a validated Config.
@@ -31,6 +32,7 @@ func Load() (*Config, error) {
 		TursoDBURL:           requireEnv("TURSO_DB_URL"),
 		TursoAuthToken:       requireEnv("TURSO_AUTH_TOKEN"),
 		GeminiAPIKey:         requireEnv("GEMINI_API_KEY"),
+		GeminiModel:          getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
 	}
 
 	// Validate PORT is a non-empty string (Koyeb injects this automatically)
