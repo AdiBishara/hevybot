@@ -36,7 +36,7 @@ func (c *geminiClient) GenerateCoachingFeedback(ctx context.Context, w *models.H
 	prompt := buildPrompt(w)
 
 	// Google AI Studio REST API format for Gemini 1.5 Flash
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", c.apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=%s", c.apiKey)
 
 	reqBody := map[string]interface{}{
 		"contents": []map[string]interface{}{
