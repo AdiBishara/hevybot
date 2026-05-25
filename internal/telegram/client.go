@@ -1,0 +1,62 @@
+package telegram
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+// Client defines the interface for our Telegram operations.
+type Client interface {
+	SendMessage(ctx context.Context, chatID int64, text string) error
+}
+
+type tgClient struct {
+	botToken string
+	client   *http.Client
+}
+
+// NewTelegramClient returns a new Telegram client.
+func NewTelegramClient(botToken string) Client {
+	return &tgClient{
+		botToken: botToken,
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+// SendMessage sends a text message to a specific Telegram chat.
+func (c *tgClient) SendMessage(ctx context.Context, chatID int64, text string) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.botToken)
+
+	reqBody := map[string]interface{}{
+		"chat_id":    chatID,
+		"text":       text,
+		"parse_mode": "HTML",
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram API returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}

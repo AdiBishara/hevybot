@@ -13,6 +13,8 @@ import (
 type Store interface {
 	SaveWorkout(ctx context.Context, w *models.HevyWorkout) error
 	DeleteWorkout(ctx context.Context, workoutID string) error
+	GetLastWorkout(ctx context.Context) (title string, startTime string, err error)
+	GetStats(ctx context.Context) (totalWorkouts int, totalWeightKG float64, err error)
 }
 
 type tursoStore struct {
@@ -119,4 +121,34 @@ func (s *tursoStore) DeleteWorkout(ctx context.Context, workoutID string) error 
 	}
 
 	return tx.Commit()
+}
+
+// GetLastWorkout returns the basic details of the most recent workout.
+func (s *tursoStore) GetLastWorkout(ctx context.Context) (string, string, error) {
+	var title, startTime string
+	err := s.db.QueryRowContext(ctx, "SELECT title, start_time FROM workouts ORDER BY start_time DESC LIMIT 1").Scan(&title, &startTime)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	return title, startTime, nil
+}
+
+// GetStats returns the total number of workouts and the total volume (weight) lifted across all time.
+func (s *tursoStore) GetStats(ctx context.Context) (int, float64, error) {
+	var totalWorkouts int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workouts").Scan(&totalWorkouts)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var totalWeight sql.NullFloat64
+	err = s.db.QueryRowContext(ctx, "SELECT SUM(weight_kg * reps) FROM sets WHERE weight_kg IS NOT NULL AND reps IS NOT NULL").Scan(&totalWeight)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return totalWorkouts, totalWeight.Float64, nil
 }

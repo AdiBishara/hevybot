@@ -17,6 +17,7 @@ import (
 	"github.com/yourusername/hevybot/internal/config"
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/handlers"
+	"github.com/yourusername/hevybot/internal/telegram"
 )
 
 func main() {
@@ -42,12 +43,13 @@ func main() {
 	}
 	logger.Info("connected to turso database successfully")
 
-	// ── AI Client ──
+	// ── AI & Telegram Clients ──
 	aiClient := ai.NewGeminiClient(cfg.GeminiAPIKey, cfg.GeminiModel)
+	tgClient := telegram.NewTelegramClient(cfg.TelegramBotToken)
 
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
-	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient)
-	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramBotToken, cfg.TelegramWebhookSecret)
+	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient, tgClient, cfg.TelegramChatID)
+	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramWebhookSecret, tgClient, store, aiClient)
 
 	// ── Router ──
 	r := chi.NewRouter()

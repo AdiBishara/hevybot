@@ -12,8 +12,9 @@ type Config struct {
 	Port              string // HTTP port the server listens on (default: 8080)
 	HevyWebhookSecret string // Shared secret used to validate inbound Hevy webhook signatures
 	HevyAPIKey        string // Used to fetch the full workout after receiving a ping
-	TelegramBotToken  string // Token issued by @BotFather
+	TelegramBotToken      string // Token issued by @BotFather
 	TelegramWebhookSecret string // Optional secret header Telegram sends with each update
+	TelegramChatID        int64  // The specific chat ID to send autonomous AI feedback to
 	TursoDBURL        string // wss://your-db.turso.io
 	TursoAuthToken    string // JWT issued by Turso
 	GeminiAPIKey      string // Key from Google AI Studio
@@ -29,6 +30,7 @@ func Load() (*Config, error) {
 		HevyAPIKey:           requireEnv("HEVY_API_KEY"),
 		TelegramBotToken:     requireEnv("TELEGRAM_BOT_TOKEN"),
 		TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
+		TelegramChatID:       requireEnvInt64("TELEGRAM_CHAT_ID"),
 		TursoDBURL:           requireEnv("TURSO_DB_URL"),
 		TursoAuthToken:       requireEnv("TURSO_AUTH_TOKEN"),
 		GeminiAPIKey:         requireEnv("GEMINI_API_KEY"),
@@ -59,4 +61,15 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// requireEnvInt64 fetches an env var and parses it as int64, panicking if missing or invalid.
+func requireEnvInt64(key string) int64 {
+	v := requireEnv(key)
+	var i int64
+	_, err := fmt.Sscanf(v, "%d", &i)
+	if err != nil {
+		panic(fmt.Sprintf("config: environment variable %q must be a valid integer", key))
+	}
+	return i
 }

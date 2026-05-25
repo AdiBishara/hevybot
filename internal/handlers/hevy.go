@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/yourusername/hevybot/internal/ai"
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/models"
+	"github.com/yourusername/hevybot/internal/telegram"
 )
 
 // HevyHandler groups all dependencies needed by Hevy webhook handlers.
@@ -21,16 +23,20 @@ type HevyHandler struct {
 	apiKey        string
 	dbStore       db.Store
 	aiClient      ai.Client
+	tgClient      telegram.Client
+	chatID        int64
 }
 
 // NewHevyHandler constructs a HevyHandler with its dependencies.
-func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore db.Store, aiClient ai.Client) *HevyHandler {
+func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore db.Store, aiClient ai.Client, tgClient telegram.Client, chatID int64) *HevyHandler {
 	return &HevyHandler{
 		logger:        logger,
 		webhookSecret: webhookSecret,
 		apiKey:        apiKey,
 		dbStore:       dbStore,
 		aiClient:      aiClient,
+		tgClient:      tgClient,
+		chatID:        chatID,
 	}
 }
 
@@ -155,7 +161,17 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 		}
 		
 		h.logger.Info("hevy: generated coaching feedback", "feedback", feedback)
-		// Phase 4: Route this feedback to Telegram!
+		
+		// Phase 4: Route this feedback to Telegram
+		if h.chatID != 0 {
+			if err := h.tgClient.SendMessage(ctx, h.chatID, fmt.Sprintf("<b>Workout Complete: %s</b>\n\n%s", w.Title, feedback)); err != nil {
+				h.logger.Error("hevy: failed to send telegram message", "error", err)
+			} else {
+				h.logger.Info("hevy: successfully sent feedback to telegram")
+			}
+		} else {
+			h.logger.Warn("hevy: TELEGRAM_CHAT_ID is 0, skipping telegram message")
+		}
 	}(&workout)
 
 	w.WriteHeader(http.StatusOK)
