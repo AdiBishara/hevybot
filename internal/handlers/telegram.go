@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yourusername/hevybot/internal/ai"
 	"github.com/yourusername/hevybot/internal/db"
@@ -21,16 +22,18 @@ type TelegramHandler struct {
 	tgClient      telegram.Client
 	dbStore       db.Store
 	aiClient      ai.Client
+	apiKey        string
 }
 
 // NewTelegramHandler constructs a TelegramHandler with its dependencies.
-func NewTelegramHandler(logger *slog.Logger, webhookSecret string, tgClient telegram.Client, dbStore db.Store, aiClient ai.Client) *TelegramHandler {
+func NewTelegramHandler(logger *slog.Logger, webhookSecret string, tgClient telegram.Client, dbStore db.Store, aiClient ai.Client, apiKey string) *TelegramHandler {
 	return &TelegramHandler{
 		logger:        logger,
 		webhookSecret: webhookSecret,
 		tgClient:      tgClient,
 		dbStore:       dbStore,
 		aiClient:      aiClient,
+		apiKey:        apiKey,
 	}
 }
 
@@ -96,6 +99,48 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			msg := fmt.Sprintf("📊 <b>Lifetime Stats</b>\n\nTotal Workouts: <b>%d</b>\nTotal Volume: <b>%.1f kg</b>", totalWorkouts, totalWeight)
 			h.tgClient.SendMessage(ctx, chat, msg)
+
+		case strings.HasPrefix(cmd, "/backfill"):
+			h.tgClient.SendMessage(ctx, chat, "⏳ Starting historical backfill... this might take a minute.")
+			client := &http.Client{Timeout: 10 * time.Second}
+			page := 1
+			totalSynced := 0
+			
+			// Simple paginated response struct for Hevy
+			type paginatedResponse struct {
+				Workouts []models.HevyWorkout `json:"workouts"`
+			}
+			
+			for {
+				url := fmt.Sprintf("https://api.hevyapp.com/v1/workouts?page=%d&pageSize=10", page)
+				req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+				req.Header.Set("api-key", h.apiKey)
+				req.Header.Set("accept", "application/json")
+				
+				resp, err := client.Do(req)
+				if err != nil || resp.StatusCode != http.StatusOK {
+					h.logger.Error("backfill api failed", "error", err)
+					break
+				}
+				
+				var payload paginatedResponse
+				json.NewDecoder(resp.Body).Decode(&payload)
+				resp.Body.Close()
+				
+				if len(payload.Workouts) == 0 {
+					break
+				}
+				
+				for _, w := range payload.Workouts {
+					if err := h.dbStore.SaveWorkout(ctx, &w); err == nil {
+						totalSynced++
+					}
+				}
+				
+				page++
+				time.Sleep(1 * time.Second) // rate limit
+			}
+			h.tgClient.SendMessage(ctx, chat, fmt.Sprintf("✅ Backfill complete! Synced %d historical workouts.", totalSynced))
 
 		case strings.HasPrefix(cmd, "/lastworkout"):
 			title, startTime, err := h.dbStore.GetLastWorkout(ctx)

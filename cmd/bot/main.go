@@ -49,7 +49,7 @@ func main() {
 
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
 	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient, tgClient, cfg.TelegramChatID)
-	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramWebhookSecret, tgClient, store, aiClient)
+	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramWebhookSecret, tgClient, store, aiClient, cfg.HevyAPIKey)
 
 	// ── Router ──
 	r := chi.NewRouter()
