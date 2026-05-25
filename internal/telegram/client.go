@@ -13,6 +13,7 @@ import (
 // Client defines the interface for our Telegram operations.
 type Client interface {
 	SendMessage(ctx context.Context, chatID int64, text string) error
+	SendKeyboard(ctx context.Context, chatID int64, text string, keyboard interface{}) error
 }
 
 type tgClient struct {
@@ -36,6 +37,42 @@ func (c *tgClient) SendMessage(ctx context.Context, chatID int64, text string) e
 		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "HTML",
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API returned status %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	return nil
+}
+
+// SendKeyboard sends a text message with an inline keyboard to a specific Telegram chat.
+func (c *tgClient) SendKeyboard(ctx context.Context, chatID int64, text string, keyboard interface{}) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.botToken)
+
+	reqBody := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         text,
+		"parse_mode":   "HTML",
+		"reply_markup": keyboard,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)

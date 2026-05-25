@@ -15,6 +15,7 @@ type Store interface {
 	DeleteWorkout(ctx context.Context, workoutID string) error
 	GetLastWorkout(ctx context.Context) (title string, startTime string, err error)
 	GetStats(ctx context.Context) (totalWorkouts int, totalWeightKG float64, err error)
+	GetMuscleGroupVolume(ctx context.Context, muscle string) (float64, error)
 }
 
 type tursoStore struct {
@@ -151,4 +152,43 @@ func (s *tursoStore) GetStats(ctx context.Context) (int, float64, error) {
 	}
 
 	return totalWorkouts, totalWeight.Float64, nil
+}
+
+// GetMuscleGroupVolume calculates total volume for a specific muscle group using keyword matching on exercise titles.
+func (s *tursoStore) GetMuscleGroupVolume(ctx context.Context, muscle string) (float64, error) {
+	var likeClauses []string
+	switch muscle {
+	case "Chest":
+		likeClauses = []string{"%bench%", "%fly%", "%push up%", "%push-up%", "%pec%"}
+	case "Back":
+		likeClauses = []string{"%pull up%", "%pull-up%", "%row%", "%lat%", "%deadlift%", "%shrug%"}
+	case "Legs":
+		likeClauses = []string{"%squat%", "%leg press%", "%extension%", "%curl%", "%calf%", "%lunge%"}
+	case "Arms":
+		likeClauses = []string{"%curl%", "%tricep%", "%extension%", "%pushdown%", "%skullcrusher%"}
+	case "Shoulders":
+		likeClauses = []string{"%overhead%", "%lateral%", "%front raise%", "%face pull%", "%delt%"}
+	case "Core":
+		likeClauses = []string{"%crunch%", "%plank%", "%sit up%", "%leg raise%", "%ab%"}
+	default:
+		return 0, fmt.Errorf("unknown muscle group: %s", muscle)
+	}
+
+	query := "SELECT SUM(s.weight_kg * s.reps) FROM sets s JOIN exercises e ON s.exercise_id = e.id WHERE s.weight_kg IS NOT NULL AND s.reps IS NOT NULL AND ("
+	args := []interface{}{}
+	for i, clause := range likeClauses {
+		if i > 0 {
+			query += " OR "
+		}
+		query += "e.title LIKE ?"
+		args = append(args, clause)
+	}
+	query += ")"
+
+	var totalVolume sql.NullFloat64
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&totalVolume)
+	if err != nil {
+		return 0, err
+	}
+	return totalVolume.Float64, nil
 }

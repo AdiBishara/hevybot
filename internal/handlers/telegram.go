@@ -74,10 +74,23 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		"text", update.Message.Text,
 	)
 
-	// ── Phase 2/3/4: Route commands ──
+	// ── Phase 2/3/4/5: Route commands & callbacks ──
+	ctx := context.Background() // Use background context for async processing if needed, or request context
+
+	// Handle Callback Queries (Button clicks)
+	if update.CallbackQuery != nil {
+		go h.handleCallbackQuery(ctx, update.CallbackQuery)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if update.Message == nil {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	text := strings.TrimSpace(update.Message.Text)
 	chatID := update.Message.Chat.ID
-	ctx := context.Background() // Use background context for async processing if needed, or request context
 
 	// If no text (e.g. sticker, photo), ignore
 	if text == "" {
@@ -156,6 +169,25 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			msg := fmt.Sprintf("🏋️‍♂️ <b>Last Workout</b>\n\n<b>%s</b>\nDate: %s", title, startTime)
 			h.tgClient.SendMessage(ctx, chat, msg)
 
+		case strings.HasPrefix(cmd, "/musclegroup"):
+			keyboard := map[string]interface{}{
+				"inline_keyboard": [][]map[string]string{
+					{
+						{"text": "Chest", "callback_data": "muscle:Chest"},
+						{"text": "Back", "callback_data": "muscle:Back"},
+					},
+					{
+						{"text": "Legs", "callback_data": "muscle:Legs"},
+						{"text": "Arms", "callback_data": "muscle:Arms"},
+					},
+					{
+						{"text": "Shoulders", "callback_data": "muscle:Shoulders"},
+						{"text": "Core", "callback_data": "muscle:Core"},
+					},
+				},
+			}
+			h.tgClient.SendKeyboard(ctx, chat, "Select a muscle group to view your total lifetime volume:", keyboard)
+
 		default:
 			// Free text question: Let's create a "dummy" HevyWorkout that just contains their question as the Title
 			// Alternatively, since our Gemini client expects a HevyWorkout, we can just pass a dummy one for now.
@@ -175,4 +207,21 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	}(chatID, text)
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.TelegramCallbackQuery) {
+	chatID := cb.Message.Chat.ID
+
+	if strings.HasPrefix(cb.Data, "muscle:") {
+		muscle := strings.TrimPrefix(cb.Data, "muscle:")
+		volume, err := h.dbStore.GetMuscleGroupVolume(ctx, muscle)
+		if err != nil {
+			h.logger.Error("failed to get muscle volume", "muscle", muscle, "error", err)
+			h.tgClient.SendMessage(ctx, chatID, fmt.Sprintf("Sorry, I couldn't calculate the volume for %s right now.", muscle))
+			return
+		}
+
+		msg := fmt.Sprintf("💪 <b>%s Volume</b>\n\nLifetime volume lifted: <b>%.1f kg</b>", muscle, volume)
+		h.tgClient.SendMessage(ctx, chatID, msg)
+	}
 }

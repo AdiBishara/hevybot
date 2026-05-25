@@ -49,8 +49,17 @@ type Set struct {
 // TelegramUpdate represents the minimal structure of an inbound Telegram webhook payload.
 // Extended in Phase 4 when command parsing is added.
 type TelegramUpdate struct {
-	UpdateID int             `json:"update_id"`
-	Message  *TelegramMessage `json:"message,omitempty"`
+	UpdateID      int                   `json:"update_id"`
+	Message       *TelegramMessage      `json:"message,omitempty"`
+	CallbackQuery *TelegramCallbackQuery `json:"callback_query,omitempty"`
+}
+
+// TelegramCallbackQuery represents an incoming callback query from an inline keyboard.
+type TelegramCallbackQuery struct {
+	ID      string           `json:"id"`
+	From    *TelegramUser    `json:"from"`
+	Message *TelegramMessage `json:"message"`
+	Data    string           `json:"data"`
 }
 
 // TelegramMessage holds the message body from a Telegram user.
