@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -36,8 +37,19 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 	// secret := r.Header.Get("X-Hevy-Signature")
 	// if !validateHMACSignature(secret, h.webhookSecret, body) { ... }
 
+	// Read raw body first to see exactly what Hevy is sending
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Error("hevy: failed to read body", "error", err)
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// LOG THE EXACT RAW PAYLOAD
+	h.logger.Info("hevy: RAW payload", "body", string(bodyBytes))
+
 	var event models.WorkoutEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	if err := json.Unmarshal(bodyBytes, &event); err != nil {
 		h.logger.Error("hevy: failed to decode workout event", "error", err)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
