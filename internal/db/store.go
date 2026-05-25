@@ -13,9 +13,9 @@ import (
 type Store interface {
 	SaveWorkout(ctx context.Context, w *models.HevyWorkout) error
 	DeleteWorkout(ctx context.Context, workoutID string) error
-	GetLastWorkout(ctx context.Context) (title string, startTime string, err error)
+	GetLastWorkoutDetailed(ctx context.Context) (*models.LastWorkoutStats, error)
 	GetStats(ctx context.Context) (totalWorkouts int, totalWeightKG float64, err error)
-	GetMuscleGroupVolume(ctx context.Context, muscle string) (float64, error)
+	GetMuscleGroup1RM(ctx context.Context, muscle string) ([]models.Exercise1RM, error)
 }
 
 type tursoStore struct {
@@ -124,17 +124,44 @@ func (s *tursoStore) DeleteWorkout(ctx context.Context, workoutID string) error 
 	return tx.Commit()
 }
 
-// GetLastWorkout returns the basic details of the most recent workout.
-func (s *tursoStore) GetLastWorkout(ctx context.Context) (string, string, error) {
-	var title, startTime string
-	err := s.db.QueryRowContext(ctx, "SELECT title, start_time FROM workouts ORDER BY start_time DESC LIMIT 1").Scan(&title, &startTime)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", "", nil
-		}
-		return "", "", err
+// GetLastWorkoutDetailed fetches the most recent workout title, time, total volume, total sets, and exercise list.
+func (s *tursoStore) GetLastWorkoutDetailed(ctx context.Context) (*models.LastWorkoutStats, error) {
+	var id, title, startTime string
+	err := s.db.QueryRowContext(ctx, "SELECT id, title, start_time FROM workouts ORDER BY start_time DESC LIMIT 1").Scan(&id, &title, &startTime)
+	if err == sql.ErrNoRows {
+		return nil, nil // No workouts yet
 	}
-	return title, startTime, nil
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &models.LastWorkoutStats{
+		Title:     title,
+		StartTime: startTime,
+	}
+
+	// Get Volume and Sets
+	var vol sql.NullFloat64
+	var sets sql.NullInt64
+	err = s.db.QueryRowContext(ctx, "SELECT SUM(s.weight_kg * s.reps), COUNT(s.id) FROM sets s JOIN exercises e ON s.exercise_id = e.id WHERE e.workout_id = ?", id).Scan(&vol, &sets)
+	if err == nil {
+		stats.Volume = vol.Float64
+		stats.Sets = int(sets.Int64)
+	}
+
+	// Get Exercise List
+	rows, err := s.db.QueryContext(ctx, "SELECT title FROM exercises WHERE workout_id = ? ORDER BY idx ASC", id)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var exTitle string
+			if err := rows.Scan(&exTitle); err == nil {
+				stats.Exercises = append(stats.Exercises, exTitle)
+			}
+		}
+	}
+
+	return stats, nil
 }
 
 // GetStats returns the total number of workouts and the total volume (weight) lifted across all time.
@@ -154,8 +181,8 @@ func (s *tursoStore) GetStats(ctx context.Context) (int, float64, error) {
 	return totalWorkouts, totalWeight.Float64, nil
 }
 
-// GetMuscleGroupVolume calculates total volume for a specific muscle group using keyword matching on exercise titles.
-func (s *tursoStore) GetMuscleGroupVolume(ctx context.Context, muscle string) (float64, error) {
+// GetMuscleGroup1RM calculates the max 1RM for each exercise in a muscle group using the Epley formula.
+func (s *tursoStore) GetMuscleGroup1RM(ctx context.Context, muscle string) ([]models.Exercise1RM, error) {
 	var likeClauses []string
 	switch muscle {
 	case "Chest":
@@ -171,10 +198,10 @@ func (s *tursoStore) GetMuscleGroupVolume(ctx context.Context, muscle string) (f
 	case "Core":
 		likeClauses = []string{"%crunch%", "%plank%", "%sit up%", "%leg raise%", "%ab%"}
 	default:
-		return 0, fmt.Errorf("unknown muscle group: %s", muscle)
+		return nil, fmt.Errorf("unknown muscle group: %s", muscle)
 	}
 
-	query := "SELECT SUM(s.weight_kg * s.reps) FROM sets s JOIN exercises e ON s.exercise_id = e.id WHERE s.weight_kg IS NOT NULL AND s.reps IS NOT NULL AND ("
+	query := "SELECT e.title, MAX(s.weight_kg * (1.0 + (s.reps / 30.0))) as one_rm FROM sets s JOIN exercises e ON s.exercise_id = e.id WHERE s.weight_kg IS NOT NULL AND s.reps IS NOT NULL AND ("
 	args := []interface{}{}
 	for i, clause := range likeClauses {
 		if i > 0 {
@@ -183,12 +210,24 @@ func (s *tursoStore) GetMuscleGroupVolume(ctx context.Context, muscle string) (f
 		query += "e.title LIKE ?"
 		args = append(args, clause)
 	}
-	query += ")"
+	query += ") GROUP BY e.title ORDER BY one_rm DESC"
 
-	var totalVolume sql.NullFloat64
-	err := s.db.QueryRowContext(ctx, query, args...).Scan(&totalVolume)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return totalVolume.Float64, nil
+	defer rows.Close()
+
+	var results []models.Exercise1RM
+	for rows.Next() {
+		var rm models.Exercise1RM
+		var val sql.NullFloat64
+		if err := rows.Scan(&rm.Title, &val); err != nil {
+			return nil, err
+		}
+		rm.OneRM = val.Float64
+		results = append(results, rm)
+	}
+
+	return results, nil
 }

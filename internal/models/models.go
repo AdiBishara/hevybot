@@ -46,6 +46,21 @@ type Set struct {
 	RPE             *float64 `json:"rpe"`
 }
 
+// Exercise1RM represents a calculated 1-rep max for a specific exercise.
+type Exercise1RM struct {
+	Title string
+	OneRM float64
+}
+
+// LastWorkoutStats holds summary info and a list of exercises for the last workout.
+type LastWorkoutStats struct {
+	Title     string
+	StartTime string
+	Volume    float64
+	Sets      int
+	Exercises []string
+}
+
 // TelegramUpdate represents the minimal structure of an inbound Telegram webhook payload.
 // Extended in Phase 4 when command parsing is added.
 type TelegramUpdate struct {

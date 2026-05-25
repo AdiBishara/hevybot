@@ -178,12 +178,22 @@ func (h *HevyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		
 		h.logger.Info("hevy: generated coaching feedback", "feedback", feedback)
 		
-		// Phase 4: Route this feedback to Telegram
+		// Append the list of exercises performed (Feature 3)
+		var b strings.Builder
+		b.WriteString(feedback)
+		b.WriteString("\n\n📝 <b>Exercises Performed:</b>\n")
+		for _, ex := range w.Exercises {
+			b.WriteString(fmt.Sprintf("- %s\n", ex.Title))
+		}
+
+		finalMessage := b.String()
+
+		// 5. Phase 4: Send via Telegram instead of HTTP response
 		if h.chatID != 0 {
-			if err := h.tgClient.SendMessage(ctx, h.chatID, fmt.Sprintf("<b>Workout Complete: %s</b>\n\n%s", w.Title, feedback)); err != nil {
+			if err := h.tgClient.SendMessage(ctx, h.chatID, finalMessage); err != nil {
 				h.logger.Error("hevy: failed to send telegram message", "error", err)
 			} else {
-				h.logger.Info("hevy: successfully sent feedback to telegram")
+				h.logger.Info("hevy: sent AI feedback via Telegram successfully")
 			}
 		} else {
 			h.logger.Warn("hevy: TELEGRAM_CHAT_ID is 0, skipping telegram message")

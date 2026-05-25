@@ -151,18 +151,28 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendMessage(ctx, chat, fmt.Sprintf("✅ Backfill complete! Synced %d historical workouts.", totalSynced))
 
 		case strings.HasPrefix(cmd, "/lastworkout"):
-			title, startTime, err := h.dbStore.GetLastWorkout(ctx)
+			stats, err := h.dbStore.GetLastWorkoutDetailed(ctx)
 			if err != nil {
 				h.logger.Error("failed to get last workout", "error", err)
 				h.tgClient.SendMessage(ctx, chat, "Sorry, I couldn't fetch your last workout.")
 				return
 			}
-			if title == "" {
+			if stats == nil {
 				h.tgClient.SendMessage(ctx, chat, "You haven't logged any workouts yet!")
 				return
 			}
-			msg := fmt.Sprintf("🏋️‍♂️ <b>Last Workout</b>\n\n<b>%s</b>\nDate: %s", title, startTime)
-			h.tgClient.SendMessage(ctx, chat, msg)
+
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("🏋️‍♂️ <b>Last Workout: %s</b>\n", stats.Title))
+			b.WriteString(fmt.Sprintf("📅 Date: %s\n", stats.StartTime))
+			b.WriteString(fmt.Sprintf("📊 Volume: <b>%.1f kg</b>\n", stats.Volume))
+			b.WriteString(fmt.Sprintf("🔢 Sets: %d\n\n", stats.Sets))
+			b.WriteString("📝 <b>Exercises Performed:</b>\n")
+			for _, ex := range stats.Exercises {
+				b.WriteString(fmt.Sprintf("- %s\n", ex))
+			}
+
+			h.tgClient.SendMessage(ctx, chat, b.String())
 
 		case strings.HasPrefix(cmd, "/musclegroup"):
 			keyboard := map[string]interface{}{
@@ -222,14 +232,24 @@ func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.Te
 
 	if strings.HasPrefix(cb.Data, "muscle:") {
 		muscle := strings.TrimPrefix(cb.Data, "muscle:")
-		volume, err := h.dbStore.GetMuscleGroupVolume(ctx, muscle)
+		rms, err := h.dbStore.GetMuscleGroup1RM(ctx, muscle)
 		if err != nil {
-			h.logger.Error("failed to get muscle volume", "muscle", muscle, "error", err)
-			h.tgClient.SendMessage(ctx, chatID, fmt.Sprintf("Sorry, I couldn't calculate the volume for %s right now.", muscle))
+			h.logger.Error("failed to get muscle 1rm", "muscle", muscle, "error", err)
+			h.tgClient.SendMessage(ctx, chatID, fmt.Sprintf("Sorry, I couldn't calculate the 1RM for %s right now.", muscle))
 			return
 		}
 
-		msg := fmt.Sprintf("💪 <b>%s Volume</b>\n\nLifetime volume lifted: <b>%.1f kg</b>", muscle, volume)
-		h.tgClient.SendMessage(ctx, chatID, msg)
+		if len(rms) == 0 {
+			h.tgClient.SendMessage(ctx, chatID, fmt.Sprintf("💪 <b>%s 1RM Records</b>\n\nYou haven't logged any %s exercises yet!", muscle, muscle))
+			return
+		}
+
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("💪 <b>%s 1RM Records</b>\n\n", muscle))
+		for _, rm := range rms {
+			b.WriteString(fmt.Sprintf("• %s: <b>%.1f kg</b>\n", rm.Title, rm.OneRM))
+		}
+
+		h.tgClient.SendMessage(ctx, chatID, b.String())
 	}
 }
