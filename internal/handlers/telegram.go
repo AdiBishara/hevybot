@@ -210,7 +210,13 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.TelegramCallbackQuery) {
-	chatID := cb.Message.Chat.ID
+	// Stop the loading spinner on the user's phone
+	if err := h.tgClient.AnswerCallbackQuery(ctx, cb.ID); err != nil {
+		h.logger.Error("failed to answer callback query", "error", err)
+	}
+
+	// Always safely use From.ID since the original Message might be nil
+	chatID := cb.From.ID
 
 	if strings.HasPrefix(cb.Data, "muscle:") {
 		muscle := strings.TrimPrefix(cb.Data, "muscle:")
