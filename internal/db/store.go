@@ -12,6 +12,7 @@ import (
 // Store defines the interface for database operations.
 type Store interface {
 	SaveWorkout(ctx context.Context, w *models.HevyWorkout) error
+	DeleteWorkout(ctx context.Context, workoutID string) error
 }
 
 type tursoStore struct {
@@ -87,6 +88,34 @@ func (s *tursoStore) SaveWorkout(ctx context.Context, w *models.HevyWorkout) err
 				return fmt.Errorf("insert set: %w", err)
 			}
 		}
+	}
+
+	return tx.Commit()
+}
+
+// DeleteWorkout removes a workout and its associated exercises and sets.
+// We manually cascade the deletes to ensure no orphan records remain, as SQLite
+// foreign key pragmas might not be globally enabled.
+func (s *tursoStore) DeleteWorkout(ctx context.Context, workoutID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Delete sets belonging to the exercises of this workout
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sets WHERE exercise_id IN (SELECT id FROM exercises WHERE workout_id = ?)", workoutID); err != nil {
+		return fmt.Errorf("delete sets: %w", err)
+	}
+
+	// 2. Delete exercises
+	if _, err := tx.ExecContext(ctx, "DELETE FROM exercises WHERE workout_id = ?", workoutID); err != nil {
+		return fmt.Errorf("delete exercises: %w", err)
+	}
+
+	// 3. Delete the workout itself
+	if _, err := tx.ExecContext(ctx, "DELETE FROM workouts WHERE id = ?", workoutID); err != nil {
+		return fmt.Errorf("delete workout: %w", err)
 	}
 
 	return tx.Commit()

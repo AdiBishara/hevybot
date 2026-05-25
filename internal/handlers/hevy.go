@@ -86,6 +86,18 @@ func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		h.logger.Info("hevy: API returned 404, assuming workout was deleted", "workout_id", payload.WorkoutID)
+		if err := h.dbStore.DeleteWorkout(r.Context(), payload.WorkoutID); err != nil {
+			h.logger.Error("hevy: failed to delete workout from db", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		h.logger.Info("hevy: workout deleted from Turso successfully", "workout_id", payload.WorkoutID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		h.logger.Error("hevy: API returned non-200", "status", resp.StatusCode)
 		http.Error(w, "bad gateway", http.StatusBadGateway)
