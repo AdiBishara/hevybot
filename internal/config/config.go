@@ -26,8 +26,8 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:              getEnv("PORT", "8080"),
-		HevyWebhookSecret:    requireEnv("HEVY_WEBHOOK_SECRET"),
-		HevyAPIKey:           requireEnv("HEVY_API_KEY"),
+		HevyWebhookSecret:    getEnv("HEVY_WEBHOOK_SECRET", ""),
+		HevyAPIKey:           getEnv("HEVY_API_KEY", ""),
 		TelegramBotToken:     requireEnv("TELEGRAM_BOT_TOKEN"),
 		TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 		TelegramChatID:       requireEnvInt64("TELEGRAM_CHAT_ID"),

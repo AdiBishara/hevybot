@@ -126,6 +126,10 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendMessage(ctx, chat, b.String())
 
 		case strings.HasPrefix(cmd, "/backfill"):
+			if h.apiKey == "" {
+				h.tgClient.SendMessage(ctx, chat, "❌ Backfill failed: No Hevy API Key provided in server configuration.")
+				return
+			}
 			h.tgClient.SendMessage(ctx, chat, "⏳ Starting historical backfill... this might take a minute.")
 			client := &http.Client{Timeout: 10 * time.Second}
 			page := 1
