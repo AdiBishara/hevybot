@@ -97,3 +97,9 @@ type TelegramUser struct {
 type TelegramChat struct {
 	ID int64 `json:"id"`
 }
+
+// BotCommand represents a Telegram bot command for the menu.
+type BotCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}

@@ -47,6 +47,17 @@ func main() {
 	aiClient := ai.NewGeminiClient(cfg.GeminiAPIKey, cfg.GeminiModel)
 	tgClient := telegram.NewTelegramClient(cfg.TelegramBotToken)
 
+	// Set Telegram Menu Commands
+	err = tgClient.SetMyCommands(context.Background(), []models.BotCommand{
+		{Command: "start", Description: "Start the bot and sync history"},
+		{Command: "stats", Description: "View your lifetime workout stats"},
+		{Command: "lastworkout", Description: "View detailed stats of your last workout"},
+		{Command: "musclegroup", Description: "Select a muscle to view your 1RM records"},
+	})
+	if err != nil {
+		logger.Warn("failed to set telegram menu commands", "error", err)
+	}
+
 	// ── Instantiate handlers (inject dependencies as they are added per phase) ──
 	hevyH := handlers.NewHevyHandler(logger, cfg.HevyWebhookSecret, cfg.HevyAPIKey, store, aiClient, tgClient, cfg.TelegramChatID)
 	telegramH := handlers.NewTelegramHandler(logger, cfg.TelegramWebhookSecret, tgClient, store, aiClient, cfg.HevyAPIKey)

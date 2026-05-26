@@ -15,6 +15,7 @@ type Client interface {
 	SendMessage(ctx context.Context, chatID int64, text string) error
 	SendKeyboard(ctx context.Context, chatID int64, text string, keyboard interface{}) error
 	AnswerCallbackQuery(ctx context.Context, callbackQueryID string) error
+	SetMyCommands(ctx context.Context, commands []models.BotCommand) error
 }
 
 type tgClient struct {
@@ -129,6 +130,39 @@ func (c *tgClient) AnswerCallbackQuery(ctx context.Context, callbackQueryID stri
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("telegram answer callback returned status %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	return nil
+}
+
+// SetMyCommands sets the list of the bot's commands for the Telegram menu.
+func (c *tgClient) SetMyCommands(ctx context.Context, commands []models.BotCommand) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", c.botToken)
+
+	reqBody := map[string]interface{}{
+		"commands": commands,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API returned status %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	return nil
