@@ -201,7 +201,11 @@ func (s *tursoStore) GetMuscleGroup1RM(ctx context.Context, muscle string) ([]mo
 		return nil, fmt.Errorf("unknown muscle group: %s", muscle)
 	}
 
-	query := "SELECT e.title, MAX(s.weight_kg * (1.0 + (s.reps / 30.0))) as one_rm FROM sets s JOIN exercises e ON s.exercise_id = e.id WHERE s.weight_kg IS NOT NULL AND s.reps IS NOT NULL AND ("
+	query := `SELECT e.title, 
+	          MAX(CASE WHEN s.reps <= 15 THEN s.weight_kg * (1.0 + (s.reps / 30.0)) ELSE s.weight_kg END) as one_rm,
+	          MAX(s.weight_kg) as max_weight 
+	          FROM sets s JOIN exercises e ON s.exercise_id = e.id 
+	          WHERE s.weight_kg IS NOT NULL AND s.reps IS NOT NULL AND (`
 	args := []interface{}{}
 	for i, clause := range likeClauses {
 		if i > 0 {
@@ -221,11 +225,13 @@ func (s *tursoStore) GetMuscleGroup1RM(ctx context.Context, muscle string) ([]mo
 	var results []models.Exercise1RM
 	for rows.Next() {
 		var rm models.Exercise1RM
-		var val sql.NullFloat64
-		if err := rows.Scan(&rm.Title, &val); err != nil {
+		var valRM sql.NullFloat64
+		var valMax sql.NullFloat64
+		if err := rows.Scan(&rm.Title, &valRM, &valMax); err != nil {
 			return nil, err
 		}
-		rm.OneRM = val.Float64
+		rm.OneRM = valRM.Float64
+		rm.MaxWeight = valMax.Float64
 		results = append(results, rm)
 	}
 

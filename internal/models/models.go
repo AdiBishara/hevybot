@@ -48,8 +48,9 @@ type Set struct {
 
 // Exercise1RM represents a calculated 1-rep max for a specific exercise.
 type Exercise1RM struct {
-	Title string
-	OneRM float64
+	Title     string
+	OneRM     float64
+	MaxWeight float64
 }
 
 // LastWorkoutStats holds summary info and a list of exercises for the last workout.

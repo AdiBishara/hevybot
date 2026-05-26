@@ -247,7 +247,7 @@ func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.Te
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("💪 <b>%s 1RM Records</b>\n\n", muscle))
 		for _, rm := range rms {
-			b.WriteString(fmt.Sprintf("• %s: <b>%.1f kg</b>\n", rm.Title, rm.OneRM))
+			b.WriteString(fmt.Sprintf("• %s: <b>%.1f kg</b> (1RM) | <b>%.1f kg</b> (Max)\n", rm.Title, rm.OneRM, rm.MaxWeight))
 		}
 
 		h.tgClient.SendMessage(ctx, chatID, b.String())
