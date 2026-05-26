@@ -203,8 +203,8 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 
 			var prompt strings.Builder
-			prompt.WriteString("You are a personalized fitness AI coach. The user is asking a fitness question or requesting a routine change (an 'audible'). ")
-			prompt.WriteString("To help you give highly personalized advice, here is their recent workout history:\n\n")
+			prompt.WriteString("You are a highly advanced fitness AI coach. The user is asking a fitness question or requesting a routine change (an 'audible'). ")
+			prompt.WriteString("To help you give highly personalized advice, here is their recent workout history, including the heaviest weight they lifted for each exercise:\n\n")
 
 			if len(recentWorkouts) > 0 {
 				for _, w := range recentWorkouts {
@@ -214,7 +214,11 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 				prompt.WriteString("(No recent workouts found in database)\n")
 			}
 
-			prompt.WriteString("\nUser's Message: " + cmd)
+			prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
+			prompt.WriteString("1. If suggesting a replacement exercise, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement.\n")
+			prompt.WriteString("2. You MUST suggest a specific starting working weight for the replacement exercise by mathematically estimating it based on the user's max weights from their history.\n\n")
+
+			prompt.WriteString("User's Message: " + cmd)
 
 			response, err := h.aiClient.Chat(ctx, prompt.String())
 			if err != nil {

@@ -192,12 +192,17 @@ func (s *tursoStore) GetRecentWorkoutsDetailed(ctx context.Context, limit int) (
 			StartTime: r.startTime,
 		}
 
-		exRows, err := s.db.QueryContext(ctx, "SELECT title FROM exercises WHERE workout_id = ? ORDER BY idx ASC", r.id)
+		exRows, err := s.db.QueryContext(ctx, "SELECT e.title, MAX(s.weight_kg) FROM exercises e LEFT JOIN sets s ON e.id = s.exercise_id WHERE e.workout_id = ? GROUP BY e.id ORDER BY e.idx ASC", r.id)
 		if err == nil {
 			for exRows.Next() {
 				var exTitle string
-				if err := exRows.Scan(&exTitle); err == nil {
-					stats.Exercises = append(stats.Exercises, exTitle)
+				var maxWeight sql.NullFloat64
+				if err := exRows.Scan(&exTitle, &maxWeight); err == nil {
+					if maxWeight.Valid && maxWeight.Float64 > 0 {
+						stats.Exercises = append(stats.Exercises, fmt.Sprintf("%s (Max: %.1f kg)", exTitle, maxWeight.Float64))
+					} else {
+						stats.Exercises = append(stats.Exercises, exTitle)
+					}
 				}
 			}
 			exRows.Close()
