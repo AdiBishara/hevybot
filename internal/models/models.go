@@ -62,6 +62,13 @@ type LastWorkoutStats struct {
 	Exercises []string
 }
 
+// LifetimeStats holds global stats and a breakdown per muscle group.
+type LifetimeStats struct {
+	TotalWorkouts int
+	TotalVolume   float64
+	MuscleCounts  map[string]int
+}
+
 // TelegramUpdate represents the minimal structure of an inbound Telegram webhook payload.
 // Extended in Phase 4 when command parsing is added.
 type TelegramUpdate struct {

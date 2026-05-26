@@ -99,14 +99,22 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendMessage(ctx, chat, "Welcome to HevyBot! Your workout data is actively syncing.\n\nTry /stats or /lastworkout, or ask me a fitness question!")
 
 		case strings.HasPrefix(cmd, "/stats"):
-			totalWorkouts, totalWeight, err := h.dbStore.GetStats(ctx)
+			stats, err := h.dbStore.GetStats(ctx)
 			if err != nil {
 				h.logger.Error("failed to get stats", "error", err)
 				h.tgClient.SendMessage(ctx, chat, "Sorry, I couldn't fetch your stats right now.")
 				return
 			}
-			msg := fmt.Sprintf("📊 <b>Lifetime Stats</b>\n\nTotal Workouts: <b>%d</b>\nTotal Volume: <b>%.1f kg</b>", totalWorkouts, totalWeight)
-			h.tgClient.SendMessage(ctx, chat, msg)
+			
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("📊 <b>Lifetime Stats</b>\n\nTotal Workouts: <b>%d</b>\nTotal Volume: <b>%.1f kg</b>\n\n", stats.TotalWorkouts, stats.TotalVolume))
+			b.WriteString("💪 <b>Muscle Group Training Frequency:</b>\n")
+			for muscle, count := range stats.MuscleCounts {
+				if count > 0 {
+					b.WriteString(fmt.Sprintf("- %s: %d exercises logged\n", muscle, count))
+				}
+			}
+			h.tgClient.SendMessage(ctx, chat, b.String())
 
 		case strings.HasPrefix(cmd, "/backfill"):
 			h.tgClient.SendMessage(ctx, chat, "⏳ Starting historical backfill... this might take a minute.")
@@ -170,6 +178,14 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			b.WriteString("📝 <b>Exercises Performed:</b>\n")
 			for _, ex := range stats.Exercises {
 				b.WriteString(fmt.Sprintf("- %s\n", ex))
+			}
+
+			// Generate AI Suggestion for the next workout
+			aiPrompt := fmt.Sprintf("The user just requested their last workout stats. Here they are:\nVolume: %.1f kg\nSets: %d\nExercises: %s\n\nWrite a 2-sentence motivational suggestion for their NEXT workout. Briefly tell them whether they should increase or decrease weights, or maintain, based on this volume and standard progressive overload principles. Be concise and conversational.", stats.Volume, stats.Sets, strings.Join(stats.Exercises, ", "))
+			suggestion, aiErr := h.aiClient.Chat(ctx, aiPrompt)
+			if aiErr == nil && suggestion != "" {
+				b.WriteString("\n🤖 <b>Coach's Suggestion for Next Time:</b>\n")
+				b.WriteString(suggestion)
 			}
 
 			h.tgClient.SendMessage(ctx, chat, b.String())

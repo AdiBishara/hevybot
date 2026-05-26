@@ -15,7 +15,7 @@ type Store interface {
 	DeleteWorkout(ctx context.Context, workoutID string) error
 	GetLastWorkoutDetailed(ctx context.Context) (*models.LastWorkoutStats, error)
 	GetRecentWorkoutsDetailed(ctx context.Context, limit int) ([]models.LastWorkoutStats, error)
-	GetStats(ctx context.Context) (totalWorkouts int, totalWeightKG float64, err error)
+	GetStats(ctx context.Context) (*models.LifetimeStats, error)
 	GetMuscleGroup1RM(ctx context.Context, muscle string) ([]models.Exercise1RM, error)
 }
 
@@ -213,40 +213,55 @@ func (s *tursoStore) GetRecentWorkoutsDetailed(ctx context.Context, limit int) (
 	return workouts, nil
 }
 
-// GetStats returns the total number of workouts and the total volume (weight) lifted across all time.
-func (s *tursoStore) GetStats(ctx context.Context) (int, float64, error) {
-	var totalWorkouts int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workouts").Scan(&totalWorkouts)
+var muscleKeywords = map[string][]string{
+	"Chest":     {"%bench press%", "%fly%", "%push up%", "%push-up%", "%pec%", "%chest press%", "%pullover%"},
+	"Back":      {"%pull up%", "%pull-up%", "%row%", "%lat %", "%pulldown%", "%deadlift%", "%shrug%", "%chin up%"},
+	"Legs":      {"%squat%", "%leg press%", "%leg extension%", "%leg curl%", "%calf%", "%lunge%", "%rdl%", "%romanian%", "%hip thrust%"},
+	"Arms":      {"%bicep curl%", "%hammer curl%", "%preacher curl%", "%tricep%", "%triceps%", "%pushdown%", "%skullcrusher%", "%french press%"},
+	"Shoulders": {"%overhead press%", "%military press%", "%lateral raise%", "%front raise%", "%face pull%", "%delt%"},
+	"Core":      {"%crunch%", "%plank%", "%sit up%", "%leg raise%", "%ab%", "%russian twist%"},
+}
+
+// GetStats returns the total number of workouts, volume, and a breakdown per muscle group.
+func (s *tursoStore) GetStats(ctx context.Context) (*models.LifetimeStats, error) {
+	var stats models.LifetimeStats
+	stats.MuscleCounts = make(map[string]int)
+
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workouts").Scan(&stats.TotalWorkouts)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 
 	var totalWeight sql.NullFloat64
 	err = s.db.QueryRowContext(ctx, "SELECT SUM(weight_kg * reps) FROM sets WHERE weight_kg IS NOT NULL AND reps IS NOT NULL").Scan(&totalWeight)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
+	}
+	stats.TotalVolume = totalWeight.Float64
+
+	for muscle, keywords := range muscleKeywords {
+		query := "SELECT COUNT(e.id) FROM exercises e WHERE "
+		args := []interface{}{}
+		for i, kw := range keywords {
+			if i > 0 {
+				query += " OR "
+			}
+			query += "e.title LIKE ?"
+			args = append(args, kw)
+		}
+		var count int
+		if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err == nil {
+			stats.MuscleCounts[muscle] = count
+		}
 	}
 
-	return totalWorkouts, totalWeight.Float64, nil
+	return &stats, nil
 }
 
 // GetMuscleGroup1RM calculates the max 1RM for each exercise in a muscle group using the Epley formula.
 func (s *tursoStore) GetMuscleGroup1RM(ctx context.Context, muscle string) ([]models.Exercise1RM, error) {
-	var likeClauses []string
-	switch muscle {
-	case "Chest":
-		likeClauses = []string{"%bench%", "%fly%", "%push up%", "%push-up%", "%pec%"}
-	case "Back":
-		likeClauses = []string{"%pull up%", "%pull-up%", "%row%", "%lat%", "%deadlift%", "%shrug%"}
-	case "Legs":
-		likeClauses = []string{"%squat%", "%leg press%", "%extension%", "%curl%", "%calf%", "%lunge%"}
-	case "Arms":
-		likeClauses = []string{"%curl%", "%tricep%", "%extension%", "%pushdown%", "%skullcrusher%"}
-	case "Shoulders":
-		likeClauses = []string{"%overhead%", "%lateral%", "%front raise%", "%face pull%", "%delt%"}
-	case "Core":
-		likeClauses = []string{"%crunch%", "%plank%", "%sit up%", "%leg raise%", "%ab%"}
-	default:
+	likeClauses, ok := muscleKeywords[muscle]
+	if !ok {
 		return nil, fmt.Errorf("unknown muscle group: %s", muscle)
 	}
 
