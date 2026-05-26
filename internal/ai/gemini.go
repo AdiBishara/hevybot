@@ -16,6 +16,7 @@ import (
 // Client defines the interface for our AI operations.
 type Client interface {
 	GenerateCoachingFeedback(ctx context.Context, w *models.HevyWorkout) (string, error)
+	Chat(ctx context.Context, text string) (string, error)
 }
 
 type geminiClient struct {
@@ -128,4 +129,61 @@ func buildPrompt(w *models.HevyWorkout) string {
 		}
 	}
 	return sb.String()
+}
+
+// Chat sends a raw text prompt to Gemini.
+func (c *geminiClient) Chat(ctx context.Context, text string) (string, error) {
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", c.model, c.apiKey)
+
+	reqBody := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]string{
+					{"text": text},
+				},
+			},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("gemini API returned status %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	var res struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+
+	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
+		return res.Candidates[0].Content.Parts[0].Text, nil
+	}
+
+	return "No response from AI.", nil
 }

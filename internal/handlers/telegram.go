@@ -194,20 +194,35 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendKeyboard(ctx, chat, "Select a muscle group to view your total lifetime volume:", keyboard)
 
 		default:
-			// Free text question: Let's create a "dummy" HevyWorkout that just contains their question as the Title
-			// Alternatively, since our Gemini client expects a HevyWorkout, we can just pass a dummy one for now.
-			// Actually, let's just let the AI know it's a direct question.
-			dummy := &models.HevyWorkout{
-				Title: fmt.Sprintf("User Question: %s", cmd),
+			h.logger.Info("routing free text to gemini with context injection", "text", cmd)
+
+			// Fetch recent workouts for context injection
+			recentWorkouts, err := h.dbStore.GetRecentWorkoutsDetailed(ctx, 10)
+			if err != nil {
+				h.logger.Error("failed to fetch recent workouts for context", "error", err)
 			}
-			
-			feedback, err := h.aiClient.GenerateCoachingFeedback(ctx, dummy)
+
+			var prompt strings.Builder
+			prompt.WriteString("You are a personalized fitness AI coach. The user is asking a fitness question or requesting a routine change (an 'audible'). ")
+			prompt.WriteString("To help you give highly personalized advice, here is their recent workout history:\n\n")
+
+			if len(recentWorkouts) > 0 {
+				for _, w := range recentWorkouts {
+					prompt.WriteString(fmt.Sprintf("- %s (%s): %s\n", w.Title, w.StartTime, strings.Join(w.Exercises, ", ")))
+				}
+			} else {
+				prompt.WriteString("(No recent workouts found in database)\n")
+			}
+
+			prompt.WriteString("\nUser's Message: " + cmd)
+
+			response, err := h.aiClient.Chat(ctx, prompt.String())
 			if err != nil {
 				h.logger.Error("failed to generate answer from gemini", "error", err)
 				h.tgClient.SendMessage(ctx, chat, "I'm having trouble thinking right now. Try again later.")
 				return
 			}
-			h.tgClient.SendMessage(ctx, chat, feedback)
+			h.tgClient.SendMessage(ctx, chat, response)
 		}
 	}(chatID, text)
 

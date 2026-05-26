@@ -14,6 +14,7 @@ type Store interface {
 	SaveWorkout(ctx context.Context, w *models.HevyWorkout) error
 	DeleteWorkout(ctx context.Context, workoutID string) error
 	GetLastWorkoutDetailed(ctx context.Context) (*models.LastWorkoutStats, error)
+	GetRecentWorkoutsDetailed(ctx context.Context, limit int) ([]models.LastWorkoutStats, error)
 	GetStats(ctx context.Context) (totalWorkouts int, totalWeightKG float64, err error)
 	GetMuscleGroup1RM(ctx context.Context, muscle string) ([]models.Exercise1RM, error)
 }
@@ -162,6 +163,49 @@ func (s *tursoStore) GetLastWorkoutDetailed(ctx context.Context) (*models.LastWo
 	}
 
 	return stats, nil
+}
+
+// GetRecentWorkoutsDetailed fetches a list of the most recent workouts with their exercises.
+func (s *tursoStore) GetRecentWorkoutsDetailed(ctx context.Context, limit int) ([]models.LastWorkoutStats, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, title, start_time FROM workouts ORDER BY start_time DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var workouts []models.LastWorkoutStats
+	type wRow struct {
+		id, title, startTime string
+	}
+	var rs []wRow
+	for rows.Next() {
+		var r wRow
+		if err := rows.Scan(&r.id, &r.title, &r.startTime); err == nil {
+			rs = append(rs, r)
+		}
+	}
+	rows.Close() // explicitly close to free connection before running inner queries
+
+	for _, r := range rs {
+		stats := models.LastWorkoutStats{
+			Title:     r.title,
+			StartTime: r.startTime,
+		}
+
+		exRows, err := s.db.QueryContext(ctx, "SELECT title FROM exercises WHERE workout_id = ? ORDER BY idx ASC", r.id)
+		if err == nil {
+			for exRows.Next() {
+				var exTitle string
+				if err := exRows.Scan(&exTitle); err == nil {
+					stats.Exercises = append(stats.Exercises, exTitle)
+				}
+			}
+			exRows.Close()
+		}
+		workouts = append(workouts, stats)
+	}
+
+	return workouts, nil
 }
 
 // GetStats returns the total number of workouts and the total volume (weight) lifted across all time.
