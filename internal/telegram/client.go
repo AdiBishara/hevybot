@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/yourusername/hevybot/internal/models"
 )
 
 // Client defines the interface for our Telegram operations.
