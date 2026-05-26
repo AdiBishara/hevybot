@@ -205,6 +205,7 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 				"inline_keyboard": [][]map[string]string{
 					{{"text": "Hypertrophy", "callback_data": "goal:Hypertrophy"}, {"text": "Strength", "callback_data": "goal:Strength"}},
 					{{"text": "Fat Loss", "callback_data": "goal:Fat Loss"}, {"text": "Endurance", "callback_data": "goal:Endurance"}},
+					{{"text": "Mobility", "callback_data": "goal:Mobility"}, {"text": "Plyometrics", "callback_data": "goal:Plyometrics"}},
 				},
 			}
 			h.tgClient.SendKeyboard(ctx, chat, "🏋️ Let's build your perfect routine! What is your primary goal?", keyboard)
