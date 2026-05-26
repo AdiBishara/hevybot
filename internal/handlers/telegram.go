@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/yourusername/hevybot/internal/ai"
@@ -15,13 +14,6 @@ import (
 	"github.com/yourusername/hevybot/internal/models"
 	"github.com/yourusername/hevybot/internal/telegram"
 )
-
-// RoutineState tracks the user's progress through the routine generation interview.
-type RoutineState struct {
-	Step  int    // 0: Init, 1: Waiting for Goal, 2: Waiting for Frequency, 3: Waiting for Details
-	Goal  string
-	Freq  string
-}
 
 // TelegramHandler groups all dependencies needed by Telegram webhook handlers.
 type TelegramHandler struct {
@@ -31,7 +23,6 @@ type TelegramHandler struct {
 	dbStore       db.Store
 	aiClient      ai.Client
 	apiKey        string
-	userStates    sync.Map // map[int64]*RoutineState
 }
 
 // NewTelegramHandler constructs a TelegramHandler with its dependencies.
@@ -126,10 +117,6 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendMessage(ctx, chat, b.String())
 
 		case strings.HasPrefix(cmd, "/backfill"):
-			if h.apiKey == "" {
-				h.tgClient.SendMessage(ctx, chat, "❌ Backfill failed: No Hevy API Key provided in server configuration.")
-				return
-			}
 			h.tgClient.SendMessage(ctx, chat, "⏳ Starting historical backfill... this might take a minute.")
 			client := &http.Client{Timeout: 10 * time.Second}
 			page := 1
@@ -203,17 +190,6 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 
 			h.tgClient.SendMessage(ctx, chat, b.String())
 
-		case strings.HasPrefix(cmd, "/routine"):
-			h.userStates.Store(chatID, &RoutineState{Step: 1})
-			keyboard := map[string]interface{}{
-				"inline_keyboard": [][]map[string]string{
-					{{"text": "Hypertrophy", "callback_data": "goal:Hypertrophy"}, {"text": "Strength", "callback_data": "goal:Strength"}},
-					{{"text": "Fat Loss", "callback_data": "goal:Fat Loss"}, {"text": "Endurance", "callback_data": "goal:Endurance"}},
-					{{"text": "Mobility", "callback_data": "goal:Mobility"}, {"text": "Plyometrics", "callback_data": "goal:Plyometrics"}},
-				},
-			}
-			h.tgClient.SendKeyboard(ctx, chat, "🏋️ Let's build your perfect routine! What is your primary goal?", keyboard)
-
 		case strings.HasPrefix(cmd, "/musclegroup"):
 			keyboard := map[string]interface{}{
 				"inline_keyboard": [][]map[string]string{
@@ -234,50 +210,6 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendKeyboard(ctx, chat, "Select a muscle group to view your total lifetime volume:", keyboard)
 
 		default:
-			// Check if user is in RoutineState Step 3
-			if val, ok := h.userStates.Load(chatID); ok {
-				state := val.(*RoutineState)
-				if state.Step == 3 {
-					h.logger.Info("routing routine generation to gemini")
-					h.tgClient.SendMessage(ctx, chat, "⏳ Analyzing your past workouts and generating your custom routine...")
-					
-					// Clear state
-					h.userStates.Delete(chatID)
-
-					// Fetch recent workouts for context injection
-					recentWorkouts, _ := h.dbStore.GetRecentWorkoutsDetailed(ctx, 10)
-					
-					var prompt strings.Builder
-					prompt.WriteString("You are a highly advanced fitness AI coach. The user wants a completely new custom workout routine. ")
-					prompt.WriteString(fmt.Sprintf("Their goal is: %s. They want to train %s days a week. ", state.Goal, state.Freq))
-					prompt.WriteString(fmt.Sprintf("Their limitations/preferences: %s\n\n", cmd))
-					prompt.WriteString("To help you give highly personalized advice, here is their recent workout history, including the heaviest weight they lifted for each exercise:\n\n")
-
-					if len(recentWorkouts) > 0 {
-						for _, w := range recentWorkouts {
-							prompt.WriteString(fmt.Sprintf("- %s (%s): %s\n", w.Title, w.StartTime, strings.Join(w.Exercises, ", ")))
-						}
-					} else {
-						prompt.WriteString("(No recent workouts found in database)\n")
-					}
-
-					prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
-					prompt.WriteString("1. You MUST generate a day-by-day structured routine (e.g. Day 1: Push, Day 2: Pull, etc.).\n")
-					prompt.WriteString("2. You MUST select specific exercises based on their goals and limitations.\n")
-					prompt.WriteString("3. You MUST suggest specific starting working weights for each exercise by mathematically estimating it based on the user's max weights from their history. (e.g. 'Bench Press: 3 sets of 8-10 reps @ 85kg').\n")
-					prompt.WriteString("4. Format the routine beautifully using bold text and bullet points.\n")
-
-					response, err := h.aiClient.Chat(ctx, prompt.String())
-					if err != nil {
-						h.logger.Error("failed to generate routine from gemini", "error", err)
-						h.tgClient.SendMessage(ctx, chat, "I'm having trouble thinking right now. Try again later.")
-						return
-					}
-					h.tgClient.SendMessage(ctx, chat, response)
-					return
-				}
-			}
-
 			h.logger.Info("routing free text to gemini with context injection", "text", cmd)
 
 			// Fetch recent workouts for context injection
@@ -287,7 +219,7 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 
 			var prompt strings.Builder
-			prompt.WriteString("You are a highly advanced fitness AI coach. The user is asking a fitness question or requesting a routine change (an 'audible'). ")
+			prompt.WriteString("You are a highly advanced fitness AI coach. The user is asking a fitness question, requesting an 'audible' (a routine tweak), or asking you to generate a completely new custom workout routine. ")
 			prompt.WriteString("To help you give highly personalized advice, here is their recent workout history, including the heaviest weight they lifted for each exercise:\n\n")
 
 			if len(recentWorkouts) > 0 {
@@ -299,8 +231,8 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 
 			prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
-			prompt.WriteString("1. If suggesting a replacement exercise, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement.\n")
-			prompt.WriteString("2. You MUST suggest a specific starting working weight for the replacement exercise by mathematically estimating it based on the user's max weights from their history.\n\n")
+			prompt.WriteString("1. If the user is asking you to generate a completely new workout routine, you MUST generate a beautifully formatted day-by-day structured plan (e.g. Day 1: Push, Day 2: Pull, etc.). You MUST suggest specific starting weights for them by mathematically estimating it based on their max weights from their history.\n")
+			prompt.WriteString("2. If suggesting a replacement exercise for an existing routine, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement, and you MUST suggest a specific starting working weight.\n\n")
 
 			prompt.WriteString("User's Message: " + cmd)
 
@@ -332,40 +264,6 @@ func (h *TelegramHandler) handleCallbackQuery(ctx context.Context, cb *models.Te
 
 	// Always safely use From.ID since the original Message might be nil
 	chatID := cb.From.ID
-
-	if strings.HasPrefix(cb.Data, "goal:") {
-		goal := strings.TrimPrefix(cb.Data, "goal:")
-		val, ok := h.userStates.Load(chatID)
-		if ok {
-			state := val.(*RoutineState)
-			state.Goal = goal
-			state.Step = 2
-			h.userStates.Store(chatID, state)
-		}
-		
-		keyboard := map[string]interface{}{
-			"inline_keyboard": [][]map[string]string{
-				{{"text": "3 Days", "callback_data": "freq:3"}, {"text": "4 Days", "callback_data": "freq:4"}},
-				{{"text": "5 Days", "callback_data": "freq:5"}, {"text": "6 Days", "callback_data": "freq:6"}},
-			},
-		}
-		h.tgClient.SendKeyboard(ctx, chatID, "🗓️ Got it. How many days a week do you want to train?", keyboard)
-		return
-	}
-
-	if strings.HasPrefix(cb.Data, "freq:") {
-		freq := strings.TrimPrefix(cb.Data, "freq:")
-		val, ok := h.userStates.Load(chatID)
-		if ok {
-			state := val.(*RoutineState)
-			state.Freq = freq
-			state.Step = 3
-			h.userStates.Store(chatID, state)
-		}
-		
-		h.tgClient.SendMessage(ctx, chatID, "📝 Finally, do you have any injuries, equipment limitations, or specific preferences? (Type your answer below, or type 'none'):")
-		return
-	}
 
 	if strings.HasPrefix(cb.Data, "muscle:") {
 		muscle := strings.TrimPrefix(cb.Data, "muscle:")
