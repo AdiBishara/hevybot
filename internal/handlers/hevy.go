@@ -46,7 +46,7 @@ func NewHevyHandler(logger *slog.Logger, webhookSecret, apiKey string, dbStore d
 // Phase 1 (current): validate shape, log, return 200.
 // Phase 2: persist to Turso.
 // Phase 3: trigger Gemini coaching prompt.
-func (h *HevyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+func (h *HevyHandler) HandleWorkoutEvent(w http.ResponseWriter, r *http.Request) {
 	// Read the raw body first for debugging
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
