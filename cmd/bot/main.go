@@ -17,6 +17,7 @@ import (
 	"github.com/yourusername/hevybot/internal/config"
 	"github.com/yourusername/hevybot/internal/db"
 	"github.com/yourusername/hevybot/internal/handlers"
+	"github.com/yourusername/hevybot/internal/models"
 	"github.com/yourusername/hevybot/internal/telegram"
 )
 
