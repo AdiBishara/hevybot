@@ -150,14 +150,20 @@ func (s *tursoStore) GetLastWorkoutDetailed(ctx context.Context) (*models.LastWo
 		stats.Sets = int(sets.Int64)
 	}
 
-	// Get Exercise List
-	rows, err := s.db.QueryContext(ctx, "SELECT title FROM exercises WHERE workout_id = ? ORDER BY idx ASC", id)
+	// Get Exercise List with Max Weight and Reps
+	rows, err := s.db.QueryContext(ctx, "SELECT e.title, MAX(s.weight_kg), MAX(s.reps) FROM exercises e LEFT JOIN sets s ON e.id = s.exercise_id WHERE e.workout_id = ? GROUP BY e.id ORDER BY e.idx ASC", id)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var exTitle string
-			if err := rows.Scan(&exTitle); err == nil {
-				stats.Exercises = append(stats.Exercises, exTitle)
+			var maxWeight sql.NullFloat64
+			var maxReps sql.NullInt64
+			if err := rows.Scan(&exTitle, &maxWeight, &maxReps); err == nil {
+				if maxWeight.Valid && maxWeight.Float64 > 0 && maxReps.Valid {
+					stats.Exercises = append(stats.Exercises, fmt.Sprintf("%s (Max: %.1f kg x %d reps)", exTitle, maxWeight.Float64, maxReps.Int64))
+				} else {
+					stats.Exercises = append(stats.Exercises, exTitle)
+				}
 			}
 		}
 	}

@@ -181,7 +181,7 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Generate AI Suggestion for the next workout
-			aiPrompt := fmt.Sprintf("The user just requested their last workout stats. Here they are:\nVolume: %.1f kg\nSets: %d\nExercises: %s\n\nWrite a 2-sentence motivational suggestion for their NEXT workout. Briefly tell them whether they should increase or decrease weights, or maintain, based on this volume and standard progressive overload principles. Be concise and conversational.", stats.Volume, stats.Sets, strings.Join(stats.Exercises, ", "))
+			aiPrompt := fmt.Sprintf("The user just requested their last workout stats. Here they are:\nVolume: %.1f kg\nSets: %d\nExercises: %s\n\nWrite a highly specific 2-sentence motivational suggestion for their NEXT workout. You MUST analyze the specific weights and reps they performed, and explicitly suggest an exact number of kilograms to add or exact rep range to aim for in their next session based on standard progressive overload principles. Be concise, mathematical, and conversational.", stats.Volume, stats.Sets, strings.Join(stats.Exercises, ", "))
 			suggestion, aiErr := h.aiClient.Chat(ctx, aiPrompt)
 			if aiErr == nil && suggestion != "" {
 				b.WriteString("\n🤖 <b>Coach's Suggestion for Next Time:</b>\n")
