@@ -51,6 +51,7 @@ func main() {
 	// Set Telegram Menu Commands
 	err = tgClient.SetMyCommands(context.Background(), []models.BotCommand{
 		{Command: "start", Description: "Start the bot and sync history"},
+		{Command: "routine", Description: "Generate a custom workout routine"},
 		{Command: "stats", Description: "View your lifetime workout stats"},
 		{Command: "lastworkout", Description: "View detailed stats of your last workout"},
 		{Command: "musclegroup", Description: "Select a muscle to view your 1RM records"},
