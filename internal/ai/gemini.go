@@ -126,7 +126,21 @@ func buildPrompt(w *models.HevyWorkout) string {
 			if set.RPE != nil {
 				rpe = *set.RPE
 			}
-			sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps (RPE: %.1f)\n", set.Index+1, weight, reps, rpe))
+			
+			// Handle Cardio / Duration-based sets
+			if weight == 0 && reps == 0 && (set.DistanceMeters != nil || set.DurationSeconds != nil) {
+				dist := 0.0
+				if set.DistanceMeters != nil {
+					dist = *set.DistanceMeters
+				}
+				dur := 0
+				if set.DurationSeconds != nil {
+					dur = *set.DurationSeconds
+				}
+				sb.WriteString(fmt.Sprintf("  Set %d: %.1f meters, %d seconds (RPE: %.1f)\n", set.Index+1, dist, dur, rpe))
+			} else {
+				sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps (RPE: %.1f)\n", set.Index+1, weight, reps, rpe))
+			}
 		}
 	}
 	return sb.String()
@@ -237,7 +251,8 @@ User Message: ` + text
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "GENERAL", fmt.Errorf("gemini API returned status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		return "GENERAL", fmt.Errorf("gemini API returned status %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	var res struct {
