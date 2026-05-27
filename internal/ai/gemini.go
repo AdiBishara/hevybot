@@ -30,7 +30,7 @@ func NewGeminiClient(apiKey, model string) Client {
 	return &geminiClient{
 		apiKey: apiKey,
 		model:  model,
-		client: &http.Client{Timeout: 30 * time.Second}, // LLMs can be slow
+		client: &http.Client{Timeout: 60 * time.Second}, // Increased to 60s for massive routine generation
 	}
 }
 
