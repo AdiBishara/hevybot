@@ -122,9 +122,10 @@ func buildPrompt(w *models.HevyWorkout) string {
 			if set.Reps != nil {
 				reps = *set.Reps
 			}
-			rpe := 0.0
+			
+			rpeStr := ""
 			if set.RPE != nil {
-				rpe = *set.RPE
+				rpeStr = fmt.Sprintf(" (RPE: %.1f)", *set.RPE)
 			}
 			
 			// Handle Cardio / Duration-based sets
@@ -137,9 +138,9 @@ func buildPrompt(w *models.HevyWorkout) string {
 				if set.DurationSeconds != nil {
 					dur = *set.DurationSeconds
 				}
-				sb.WriteString(fmt.Sprintf("  Set %d: %.1f meters, %d seconds (RPE: %.1f)\n", set.Index+1, dist, dur, rpe))
+				sb.WriteString(fmt.Sprintf("  Set %d: %.1f meters, %d seconds%s\n", set.Index+1, dist, dur, rpeStr))
 			} else {
-				sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps (RPE: %.1f)\n", set.Index+1, weight, reps, rpe))
+				sb.WriteString(fmt.Sprintf("  Set %d: %.1f kg x %d reps%s\n", set.Index+1, weight, reps, rpeStr))
 			}
 		}
 	}
