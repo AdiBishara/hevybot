@@ -282,8 +282,13 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 
 			prompt.WriteString("\n\nUser's Message: " + cmd)
+			
+			h.logger.Info("sending generated prompt to gemini chat", "intent", intent, "prompt_length", len(prompt.String()))
 
 			response, err := h.aiClient.Chat(ctx, prompt.String())
+			
+			h.logger.Info("received response from gemini chat", "error_present", err != nil, "response_length", len(response))
+			
 			if err != nil {
 				h.logger.Error("failed to generate answer from gemini", "error", err)
 				h.tgClient.SendMessage(ctx, chat, "I'm having trouble thinking right now. Try again later.")
