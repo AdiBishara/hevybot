@@ -210,31 +210,78 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.tgClient.SendKeyboard(ctx, chat, "Select a muscle group to view your total lifetime volume:", keyboard)
 
 		default:
-			h.logger.Info("routing free text to gemini with context injection", "text", cmd)
+			h.logger.Info("routing free text to intent classifier", "text", cmd)
 
-			// Fetch recent workouts for context injection
-			recentWorkouts, err := h.dbStore.GetRecentWorkoutsDetailed(ctx, 10)
+			// Step 1: Classify Intent
+			intent, err := h.aiClient.ClassifyIntent(ctx, cmd)
 			if err != nil {
-				h.logger.Error("failed to fetch recent workouts for context", "error", err)
+				h.logger.Error("failed to classify intent", "error", err)
+				intent = "GENERAL" // fallback
 			}
+			h.logger.Info("intent classified", "intent", intent)
 
 			var prompt strings.Builder
-			prompt.WriteString("You are a highly advanced fitness AI coach. The user is asking a fitness question, requesting an 'audible' (a routine tweak), or asking you to generate a completely new custom workout routine. ")
-			prompt.WriteString("To help you give highly personalized advice, here is their recent workout history, including the heaviest weight they lifted for each exercise:\n\n")
 
-			if len(recentWorkouts) > 0 {
-				for _, w := range recentWorkouts {
-					prompt.WriteString(fmt.Sprintf("- %s (%s): %s\n", w.Title, w.StartTime, strings.Join(w.Exercises, ", ")))
+			// Step 2: Route based on intent
+			switch intent {
+			case "ROUTINE_GEN", "AUDIBLE":
+				recentWorkouts, _ := h.dbStore.GetRecentWorkoutsDetailed(ctx, 10)
+				prompt.WriteString("You are an elite fitness AI coach. ")
+				if intent == "ROUTINE_GEN" {
+					prompt.WriteString("The user is asking you to generate a completely new custom workout routine.\n\n")
+				} else {
+					prompt.WriteString("The user is requesting an 'audible' (a routine tweak or exercise swap).\n\n")
 				}
-			} else {
-				prompt.WriteString("(No recent workouts found in database)\n")
+				
+				prompt.WriteString("To help you give highly personalized advice, here is their recent workout history, including the heaviest weight they lifted for each exercise:\n")
+				if len(recentWorkouts) > 0 {
+					for _, w := range recentWorkouts {
+						prompt.WriteString(fmt.Sprintf("- %s (%s): %s\n", w.Title, w.StartTime, strings.Join(w.Exercises, ", ")))
+					}
+				} else {
+					prompt.WriteString("(No recent workouts found in database)\n")
+				}
+
+				prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
+				if intent == "ROUTINE_GEN" {
+					prompt.WriteString("1. You MUST generate a beautifully formatted day-by-day structured plan (e.g. Day 1: Push, Day 2: Pull, etc.).\n")
+					prompt.WriteString("2. You MUST suggest specific starting weights for them by mathematically estimating it based on their max weights from their history.\n")
+				} else {
+					prompt.WriteString("1. If suggesting a replacement exercise, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement.\n")
+					prompt.WriteString("2. You MUST suggest a specific starting working weight for the replacement exercise by mathematically estimating it based on their history.\n")
+				}
+
+			case "ANALYTICS":
+				stats, _ := h.dbStore.GetStats(ctx)
+				prompt.WriteString("You are an elite fitness AI data analyst. The user is asking about their progress or strength.\n\n")
+				prompt.WriteString("Here is their complete lifetime data:\n")
+				if stats != nil {
+					prompt.WriteString(fmt.Sprintf("Total Workouts: %d\nTotal Volume: %.1f kg\n", stats.TotalWorkouts, stats.TotalVolume))
+					for m, c := range stats.MuscleCounts {
+						if c > 0 {
+							prompt.WriteString(fmt.Sprintf("- %s exercises logged: %d\n", m, c))
+						}
+					}
+				}
+				prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n1. Provide a detailed, brutally honest analysis of their data.\n2. Point out muscle imbalances (e.g., if Chest is 100 but Legs is 5).")
+
+			case "FORM_CHECK":
+				prompt.WriteString("You are an elite fitness AI coach. The user is asking about exercise form or technique.\n")
+				prompt.WriteString("CRITICAL INSTRUCTIONS:\n1. Break down the movement into 3 clear steps.\n2. Warn them about the most common injury risk for this exercise.")
+
+			case "NUTRITION":
+				prompt.WriteString("You are an elite sports nutritionist. The user is asking about diet, macros, or supplements.\n")
+				prompt.WriteString("CRITICAL INSTRUCTIONS:\n1. Be concise and scientific.\n2. Do not use generic disclaimers like 'consult a doctor', just give them the facts.")
+
+			case "MOTIVATION":
+				prompt.WriteString("You are an intense, high-energy strength coach (channel the energy of Ronnie Coleman or David Goggins).\n")
+				prompt.WriteString("CRITICAL INSTRUCTIONS:\n1. Hype the user up.\n2. Use intense, motivating language. Do not be polite.")
+
+			default:
+				prompt.WriteString("You are a knowledgeable fitness AI coach. Answer the user's fitness question directly and concisely.")
 			}
 
-			prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
-			prompt.WriteString("1. If the user is asking you to generate a completely new workout routine, you MUST generate a beautifully formatted day-by-day structured plan (e.g. Day 1: Push, Day 2: Pull, etc.). You MUST suggest specific starting weights for them by mathematically estimating it based on their max weights from their history.\n")
-			prompt.WriteString("2. If suggesting a replacement exercise for an existing routine, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement, and you MUST suggest a specific starting working weight.\n\n")
-
-			prompt.WriteString("User's Message: " + cmd)
+			prompt.WriteString("\n\nUser's Message: " + cmd)
 
 			response, err := h.aiClient.Chat(ctx, prompt.String())
 			if err != nil {
