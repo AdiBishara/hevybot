@@ -244,8 +244,10 @@ func (h *TelegramHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 
 				prompt.WriteString("\nCRITICAL INSTRUCTIONS:\n")
 				if intent == "ROUTINE_GEN" {
-					prompt.WriteString("1. You MUST generate a beautifully formatted day-by-day structured plan (e.g. Day 1: Push, Day 2: Pull, etc.).\n")
-					prompt.WriteString("2. You MUST suggest specific starting weights for them by mathematically estimating it based on their max weights from their history.\n")
+					prompt.WriteString("1. Generate EXACTLY what the user asks for. If they ask for a 15-minute warmup, a single workout, or a specific mobility target, ONLY provide that. DO NOT tack on unsolicited multi-day splits.\n")
+					prompt.WriteString("2. If they ask for mobility or warmup, identify the specific region they want to target and tailor the routine to that region.\n")
+					prompt.WriteString("3. If they DO ask for a full multi-day routine, generate a beautifully formatted day-by-day structured plan (e.g. Day 1: Push, Day 2: Pull, etc.).\n")
+					prompt.WriteString("4. You MUST suggest specific starting weights for them by mathematically estimating it based on their max weights from their history (only applicable for weighted exercises).\n")
 				} else {
 					prompt.WriteString("1. If suggesting a replacement exercise, you MUST explicitly state whether your suggested replacement is a 'Compound' or 'Isolation' movement.\n")
 					prompt.WriteString("2. You MUST suggest a specific starting working weight for the replacement exercise by mathematically estimating it based on their history.\n")
