@@ -33,14 +33,34 @@ func NewTelegramClient(botToken string) Client {
 	}
 }
 
-// SendMessage sends a text message to a specific Telegram chat.
+// SendMessage sends a text message to a specific Telegram chat, automatically chunking long messages.
 func (c *tgClient) SendMessage(ctx context.Context, chatID int64, text string) error {
+	// Telegram limit is 4096. We use 4000 to be safe.
+	const maxLen = 4000
+	
+	runes := []rune(text)
+	for i := 0; i < len(runes); i += maxLen {
+		end := i + maxLen
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunk := string(runes[i:end])
+		
+		err := c.sendChunk(ctx, chatID, chunk)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *tgClient) sendChunk(ctx context.Context, chatID int64, text string) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.botToken)
 
 	reqBody := map[string]interface{}{
 		"chat_id":    chatID,
 		"text":       text,
-		"parse_mode": "HTML",
+		"parse_mode": "HTML", // Use HTML to avoid markdown parsing errors on partial chunks
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
